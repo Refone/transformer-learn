@@ -1,4 +1,6 @@
 .idea/
 .claude/
-demo_translation/data/processed/
 __pycache__/
+
+demo_translation/data/processed/*
+demo_translation/model/*

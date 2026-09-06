@@ -14,14 +14,14 @@ class TranslationModel(nn.Module):
         # 定义两个嵌入层
         # src_ids (B, Ls)
         #   -> src_emb(B, Ls, D)
-        self.input_embedding = nn.Embedding(
+        self.src_embedding = nn.Embedding(
             src_vocab_size,
             self.d_model,
             padding_idx=src_padding_idx
         )
         # tgt_ids (B, Lt)
         #   -> tgt_emb(B, Lt, D)
-        self.output_embedding = nn.Embedding(
+        self.tgt_embedding = nn.Embedding(
             tgt_vocab_size,
             self.d_model,
             padding_idx=tgt_padding_idx
@@ -63,7 +63,8 @@ class TranslationModel(nn.Module):
         self.register_buffer('pe', pe)
 
     # 创建 PE 矩阵
-    def create_pe(self, d_model, L):
+    @staticmethod
+    def create_pe(d_model, L):
         # pe: (L, d_model)
         pe = torch.zeros(L, d_model)
 
@@ -88,7 +89,7 @@ class TranslationModel(nn.Module):
         return x + self.pe[:, :x.size(1)]
 
     def encode(self, src_ids, src_key_padding_mask):
-        src_emb = self.input_embedding(src_ids)  # (B, Ls, D)
+        src_emb = self.src_embedding(src_ids)  # (B, Ls, D)
 
         encoder_input = self.positional_encoding(src_emb)  # (B, Ls, D)
 
@@ -103,12 +104,13 @@ class TranslationModel(nn.Module):
                tgt_ids,
                tgt_is_causal,
                tgt_key_padding_mask):
-        tgt_emb = self.output_embedding(tgt_ids)  # (B, Lt, D)
+        tgt_emb = self.tgt_embedding(tgt_ids)  # (B, Lt, D)
 
         decoder_input = self.positional_encoding(tgt_emb)  # (B, Lt, D)
 
+        device = tgt_ids.device
         if tgt_is_causal:
-            tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt_ids.shape[1]).bool()
+            tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt_ids.shape[1]).bool().to(device)
         else:
             tgt_mask = None
 
@@ -152,9 +154,10 @@ class TranslationModel(nn.Module):
 
         logits = self.linear(decoder_output)    # (B, Lt, Vt)
 
-        probs = torch.softmax(logits, dim=-1)   # (B, Lt, Vt)
+        return logits
+        # probs = torch.softmax(logits, dim=-1)   # (B, Lt, Vt)
 
-        output_ids = torch.argmax(probs, dim=-1)    # (B, Lt)
+        # output_ids = torch.argmax(probs, dim=-1)    # (B, Lt)
 
-        return output_ids
+        # return output_ids
 

@@ -77,20 +77,24 @@ class TranslateDataset(Dataset):
         """
         return self.data[index]['zh'], self.data[index]['en']
 
-def get_loader(is_train):
-    path = PROCESSED_DATA_DIR / (TRAIN_RAW_FILE if is_train else TEST_RAW_FILE)
-    # 获取数据集
-    dataset = TranslateDataset(path)
+class TranslateDataLoader(DataLoader):
+    def __init__(self, is_train):
+        self.is_train = is_train
+        path = PROCESSED_DATA_DIR / (TRAIN_RAW_FILE if is_train else TEST_RAW_FILE)
+        # 获取数据集
+        dataset = TranslateDataset(path)
+        self.max_zh_len = dataset.max_zh_len
+        self.max_en_len = dataset.max_en_len
 
+        super().__init__(dataset, batch_size=BATCH_SIZE, shuffle=is_train, collate_fn=self.collate_fn)
+
+    @staticmethod
     def collate_fn(batch):
-        input_list = [ torch.tensor(item[0]) for item in batch ]
-        target_list = [ torch.tensor(item[1]) for item in batch ]
+        input_list = [torch.tensor(item[0]) for item in batch]
+        target_list = [torch.tensor(item[1]) for item in batch]
 
         # 各自填充
         input_batch = pad_sequence(input_list, batch_first=True, padding_value=0)
         target_batch = pad_sequence(target_list, batch_first=True, padding_value=0)
 
         return input_batch, target_batch
-
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=is_train, collate_fn=collate_fn)
-    return loader

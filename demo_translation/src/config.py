@@ -20,7 +20,7 @@ EN_VOCAB_FILE = PROCESSED_DATA_DIR / 'en_vocab.txt'
 TRAIN_IDS_JSONL_FILE = PROCESSED_DATA_DIR / 'train_ids.jsonl'
 TEST_IDS_JSONL_FILE = PROCESSED_DATA_DIR / 'test_ids.jsonl'
 
-BEST_MODEL = 'best_model.pt'
+BEST_MODEL = MODEL_DIR / 'best_model.pt'
 
 # 定义特殊token
 UNK_TOKEN = '<unk>'
@@ -30,9 +30,8 @@ EOS_TOKEN = '<eos>'
 
 # 训练超参数
 LEARNING_RATE = 1e-3
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 EPOCHS = 50
-MAX_SEQ_LEN = 128   # 最大序列长度
 
 # 模型结构超参数
 D_MODEL = 128
