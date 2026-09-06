@@ -2,29 +2,33 @@ import math
 
 import torch
 import torch.nn as nn
+
 from config import *
+from tokenizer import BaseTokenizer
+
 
 class TranslationModel(nn.Module):
 
     def __init__(self,
-                 src_vocab_size, src_padding_idx, max_src_seq_len,
-                 tgt_vocab_size, tgt_padding_idx, max_tgt_seq_len):
+                 src_tokenizer:BaseTokenizer, tgt_tokenizer:BaseTokenizer):
         super().__init__()
         self.d_model = D_MODEL
+        self.src_tokenizer = src_tokenizer
+        self.tgt_tokenizer = tgt_tokenizer
         # 定义两个嵌入层
         # src_ids (B, Ls)
         #   -> src_emb(B, Ls, D)
         self.src_embedding = nn.Embedding(
-            src_vocab_size,
-            self.d_model,
-            padding_idx=src_padding_idx
+            num_embeddings=self.src_tokenizer.vocab_size,
+            embedding_dim=self.d_model,
+            padding_idx=src_tokenizer.pad_id
         )
         # tgt_ids (B, Lt)
         #   -> tgt_emb(B, Lt, D)
         self.tgt_embedding = nn.Embedding(
-            tgt_vocab_size,
-            self.d_model,
-            padding_idx=tgt_padding_idx
+            num_embeddings=tgt_tokenizer.vocab_size,
+            embedding_dim=self.d_model,
+            padding_idx=tgt_tokenizer.pad_id
         )
 
         # 编码层
@@ -56,10 +60,10 @@ class TranslationModel(nn.Module):
         #   -> logits(B, Lt, Vt)
         self.linear = nn.Linear(
             in_features=self.d_model,
-            out_features=tgt_vocab_size
+            out_features=tgt_tokenizer.vocab_size,
         )
         # 位置编码逻辑（因为不存在参数，所以不设置其为层）
-        pe = self.create_pe(self.d_model, max(max_src_seq_len, max_tgt_seq_len))
+        pe = self.create_pe(self.d_model, MAX_SEQ_LEN)
         self.register_buffer('pe', pe)
 
     # 创建 PE 矩阵
@@ -102,14 +106,14 @@ class TranslationModel(nn.Module):
                memory,
                memory_key_padding_mask,
                tgt_ids,
-               tgt_is_causal,
+               is_causal,
                tgt_key_padding_mask):
         tgt_emb = self.tgt_embedding(tgt_ids)  # (B, Lt, D)
 
         decoder_input = self.positional_encoding(tgt_emb)  # (B, Lt, D)
 
         device = tgt_ids.device
-        if tgt_is_causal:
+        if is_causal:
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt_ids.shape[1]).bool().to(device)
         else:
             tgt_mask = None
@@ -121,13 +125,15 @@ class TranslationModel(nn.Module):
             tgt_mask=tgt_mask,
         )  # (B, Lt, D)
 
-        return decoder_output
+        logits = self.linear(decoder_output)    # (B, Lt, Vt)
+
+        return logits
 
     def forward(self, src_ids, tgt_ids,
                 src_key_padding_mask=None,
                 tgt_key_padding_mask=None,
                 memory_key_padding_mask=None,
-                tgt_is_causal=False):
+                is_causal=False):
         """
         前向传播
         :param src_ids: 源语言 Token 索引序列  (B, L_src)
@@ -135,7 +141,7 @@ class TranslationModel(nn.Module):
         :param src_key_padding_mask:    源语言序列填充屏蔽   (B, L_src)
         :param tgt_key_padding_mask:    目标语言序列填充屏蔽  (B, L_tgt)
         :param memory_key_padding_mask: memory填充屏蔽      (B, L_src)
-        :param tgt_is_causal:           因果掩码，为 True tgt_mask 设置上三角矩阵
+        :param is_causal:           因果掩码，为 True tgt_mask 设置上三角矩阵
         :return:
 
         直接 tgt_is_causal 方式创建因果掩码有版本兼容问题，故底层采用 tgt_mask
@@ -144,20 +150,82 @@ class TranslationModel(nn.Module):
             src_ids=src_ids,
             src_key_padding_mask=src_key_padding_mask)    # (B, Ls, D)
 
-        decoder_output = self.decode(
+        logits = self.decode(
             memory=memory,
             memory_key_padding_mask=memory_key_padding_mask,
             tgt_ids=tgt_ids,
             tgt_key_padding_mask=tgt_key_padding_mask,
-            tgt_is_causal=tgt_is_causal
-        )   # (B, Lt, D)
-
-        logits = self.linear(decoder_output)    # (B, Lt, Vt)
+            is_causal=is_causal
+        )   # (B, Lt, Vt)
 
         return logits
-        # probs = torch.softmax(logits, dim=-1)   # (B, Lt, Vt)
 
-        # output_ids = torch.argmax(probs, dim=-1)    # (B, Lt)
+    @staticmethod
+    def logits_to_ids(logits):
+        probs = torch.softmax(logits, dim=-1)   # (B, Lt, Vt)
+        output_ids = torch.argmax(probs, dim=-1)    # (B, Lt)
+        return output_ids
 
-        # return output_ids
+    def predict(self, text):
+        # 1. 处理输入,编码为模型输入 (N=1, L)
+        device = self.src_embedding.weight.device
+        ids = self.src_tokenizer.encode(text)
+        inputs = torch.tensor([ids]).to(device)
 
+        # 2. 推理预测
+        self.eval()
+        with torch.no_grad():
+            # 前向传播
+            src_key_padding_mask = (inputs == self.src_embedding.padding_idx)
+            memory = self.encode(src_ids=inputs, src_key_padding_mask=src_key_padding_mask)
+
+            # 解码(自回归生成)
+            # 2.1. 定义解码器初始输入(<sos>),形状(N,Lt=1)
+            N = inputs.shape[0]
+            decoder_inputs = torch.full((N, 1), self.tgt_tokenizer.sos_id).to(device)
+
+            # 定义标志位,记录当前数据样本是否已生成<eos>,默认 N 个 False
+            is_finished = torch.full((N, ), False, dtype=torch.bool).to(device)
+
+            # 2.2. 循环迭代,自回归生成
+            generated_ids = []
+            for i in range(MAX_SEQ_LEN):
+                # 2.2.1. 调用模型的一步解码,得到输出(N, T, Vt)
+                tgt_key_padding_mask = (decoder_inputs == self.tgt_embedding.padding_idx)
+                logits = self.decode(
+                    memory=memory,
+                    memory_key_padding_mask=src_key_padding_mask,
+                    tgt_ids=decoder_inputs,
+                    is_causal=True,
+                    tgt_key_padding_mask=tgt_key_padding_mask,
+                )
+
+                # 2.2.2 取最后一个位置的特征向量,贪心解码,得到形状为 (N,) 的预测 ids
+                next_token_ids = torch.argmax(logits[:, -1], dim=-1)
+
+                # 2.2.3 更新解码器输入, 拼接一个 id (N, T) -> (N, T+1)
+                decoder_inputs = torch.cat([decoder_inputs, next_token_ids.unsqueeze(1)], dim=-1)
+
+                # 2.2.4 保存当前生成的 id
+                generated_ids.append(next_token_ids.unsqueeze(1))
+
+                # 2.2.5 预判是否生成结束 (有没有<eos>)
+                is_finished |= (next_token_ids == self.tgt_tokenizer.eos_id)
+
+                if is_finished.all():
+                    break
+
+            # 3. 整理最终输出, id 列表的二维列表
+            # 3.1 合并每一步生成的 token id, 形状为(N, L), 再转成二维 list
+            generated_list = torch.cat(generated_ids, dim=-1).tolist()
+
+            # 3.2 删除 <eos> 之后的无效 token id
+            for i, ids in enumerate(generated_list):
+                # 如果找到 <eos> 就返回缩影位置, 截断处理
+                if self.tgt_tokenizer.eos_id in ids:
+                    eos_pos = ids.index( self.tgt_tokenizer.eos_id )
+                    generated_list[i] = ids[:eos_pos]
+
+        # 4. 处理输出,解码为英文句子
+        sentence = self.tgt_tokenizer.decode(generated_list[0])
+        return sentence

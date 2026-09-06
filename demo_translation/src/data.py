@@ -1,8 +1,4 @@
-import json
-from hmac import trans_5C
-
 import torch
-from sympy.tensor import tensor
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset, DataLoader
 
@@ -45,12 +41,12 @@ def preprocess():
     # 5. 编码转化数据
     # 转化为形如：
     # {"en":[23, 345, .., 2342], "zh":[235, 1234, ..., 2134]}
-    en_encoder = lambda text: en_tokenizer.encode(text)
-    zh_encoder = lambda text: zh_tokenizer.encode(text)
-    train_set['en'] = train_set['en'].apply( en_encoder )
-    train_set['zh'] = train_set['zh'].apply( zh_encoder )
-    test_set['zh'] = test_set['zh'].apply( zh_encoder )
-    test_set['en'] = test_set['en'].apply( en_encoder )
+    en_encode = lambda text: en_tokenizer.encode(text, mark=True)
+    zh_encode = lambda text: zh_tokenizer.encode(text)
+    train_set['en'] = train_set['en'].apply( en_encode )
+    train_set['zh'] = train_set['zh'].apply( zh_encode )
+    test_set['zh'] = test_set['zh'].apply( zh_encode )
+    test_set['en'] = test_set['en'].apply( en_encode )
 
     # 6. 保存数据集
     train_set.to_json(TRAIN_IDS_JSONL_FILE, orient='records', lines=True)
@@ -61,7 +57,7 @@ def preprocess():
 class TranslateDataset(Dataset):
     def __init__(self, json_file):
         self.json_file = json_file
-        self.data = pd.read_json(TRAIN_IDS_JSONL_FILE, lines=True).to_dict(orient='records')
+        self.data = pd.read_json(self.json_file, lines=True).to_dict(orient='records')
 
         self.max_zh_len = max((len(item['zh']) for item in self.data), default=0)
         self.max_en_len = max((len(item['en']) for item in self.data), default=0)
@@ -80,7 +76,7 @@ class TranslateDataset(Dataset):
 class TranslateDataLoader(DataLoader):
     def __init__(self, is_train):
         self.is_train = is_train
-        path = PROCESSED_DATA_DIR / (TRAIN_RAW_FILE if is_train else TEST_RAW_FILE)
+        path = TRAIN_IDS_JSONL_FILE if is_train else TEST_IDS_JSONL_FILE
         # 获取数据集
         dataset = TranslateDataset(path)
         self.max_zh_len = dataset.max_zh_len

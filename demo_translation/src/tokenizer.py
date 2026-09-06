@@ -25,15 +25,25 @@ class BaseTokenizer(ABC):
     def tokenize(cls, sentence):
         pass
 
-    def encode(self, sentence):
+    def encode(self, sentence, mark=False):
         """
         把句子转换为词ID
         :param sentence:  需要转码的句子
+        :param mark:    是否在前后加上 <sos> <eos>
         :return: ID 列表
+
+        之所以要在这个阶段加 tag,一方面是性能优化,
+        另一方面,可以避免处理 <eos> 和 <pad> 谁先谁后的问题
         """
-        ids = []
-        for token in self.tokenize(sentence):
-            ids.append(self.word2id.get(token, self.unk_id))
+        # 1. 分词,得到 token 列表
+        tokens = self.tokenize(sentence)
+
+        # 2. 将 token 转化为 id
+        ids = [ self.word2id.get(token, self.unk_id) for token in tokens ]
+
+        if mark:
+            ids = [self.sos_id] + ids + [self.eos_id]
+
         return ids
 
     def decode(self, ids):
@@ -57,18 +67,26 @@ class BaseTokenizer(ABC):
             tokens = cls.tokenize(sentence)
             vocab_set.update(tokens)
 
-        vocab_list = [UNK_TOKEN,
-                      PAD_TOKEN,
+        vocab_list = [PAD_TOKEN,
+                      UNK_TOKEN,
                       SOS_TOKEN,
-                      EOS_TOKEN] + list(vocab_set)
+                      EOS_TOKEN] + sorted(vocab_set)
 
         with open(vocab_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(vocab_list))
 
 class EnTokenizer(BaseTokenizer):
+    tokenizer = TreebankWordTokenizer()
+    detokenizer = TreebankWordDetokenizer()
+
     @classmethod
     def tokenize(cls, sentence):
-        return TreebankWordTokenizer().tokenize(sentence)
+        return cls.tokenizer.tokenize(sentence)
+
+    def decode(self, ids):
+        tokens = [ self.id2word[index] for index in ids ]
+        sentence = self.detokenizer.detokenize(tokens)
+        return sentence
 
 class ZhTokenizer(BaseTokenizer):
     @classmethod
