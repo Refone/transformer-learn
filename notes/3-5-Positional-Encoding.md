@@ -1,7 +1,7 @@
 ## 3.5 Positional Encoding
 
 <p align="center">
-    <img src="../images/03_02_transformer_architecture.png" width="50%">
+    <img src="../images/03_02_attention_is_all_you_need.png" width="50%">
 </p>
 
 > Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence.

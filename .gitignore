@@ -1,0 +1,4 @@
+.idea/
+.claude/
+demo_translation/data/processed/
+__pycache__/

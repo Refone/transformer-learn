@@ -1,7 +1,14 @@
 ## 3.4 Embeddings and Softmax
 
+
+- 标准嵌入层即词表 `embed.weight.shape = (词汇量, d_model)` 形状的矩阵。
+- 词ID `(batch_size, L)` -> 词向量 `(batch_size, L, d_model)`
 <p align="center">
-    <img src="../images/03_02_transformer_architecture.png" width="50%">
+    <img src="../images/03_27_nlp_base_model.png" width="90%">
+</p>
+
+<p align="center">
+    <img src="../images/03_02_attention_is_all_you_need.png" width="50%">
 </p>
 
 > Similarly to other sequence transduction models, we use learned embeddings to convert the input tokens and output tokens to vectors of dimension dmodel.
@@ -21,4 +28,3 @@
 > In the embedding layers, we multiply those weights by $\sqrt{d_{model}}$.
 
 在嵌入层中，我们将这些权重乘以 $\sqrt{d_{model}}$。
-
