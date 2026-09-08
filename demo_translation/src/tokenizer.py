@@ -6,7 +6,7 @@ from abc import ABC
 
 from nltk import TreebankWordTokenizer, TreebankWordDetokenizer
 
-from demo_translation.src.config import UNK_TOKEN, PAD_TOKEN, SOS_TOKEN, EOS_TOKEN
+from config import *
 
 class BaseTokenizer(ABC):
     def __init__(self, vocab_list):

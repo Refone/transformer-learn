@@ -31,8 +31,8 @@ EOS_TOKEN = '<eos>'
 # 训练超参数
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 64
-EPOCHS = 20
-MAX_SEQ_LEN = 256
+EPOCHS = 50
+MAX_SEQ_LEN = 128
 
 # 模型结构超参数
 D_MODEL = 128

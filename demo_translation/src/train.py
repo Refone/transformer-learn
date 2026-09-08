@@ -1,6 +1,6 @@
+from config import *
 from tqdm import tqdm
 from model import *
-from config import *
 from data import *
 import torch
 
@@ -27,10 +27,10 @@ def train_chinese_to_english():
     for epochs in range(EPOCHS):
         print('='*10, f' Epoch [{epochs + 1}/{EPOCHS}] ', '='*10)
         # 训练一个轮次, 返回平均损失
-        train_loss, test_loss = train_one_epoch(decoder_tokenizer=en_tokenizer, model=model,
-                                                train_loader=data_loader, test_loader=data_loader,
-                                                optimizer=optimizer, loss_fn=loss_fn, device=device)
-        print(f'训练误差: {train_loss}, 测试误差: {test_loss}')
+        train_loss = train_one_epoch(decoder_tokenizer=en_tokenizer, model=model,
+                                     train_loader=data_loader, test_loader=data_loader,
+                                     optimizer=optimizer, loss_fn=loss_fn, device=device)
+        print(f'训练误差: {train_loss}')
 
         if train_loss < min_loss:
             min_loss = train_loss
@@ -80,4 +80,4 @@ def train_one_epoch(model, decoder_tokenizer,
         # 累加损失
         total_loss += loss.item()
 
-    return total_loss / len(train_loader), 0
+    return total_loss / len(train_loader)

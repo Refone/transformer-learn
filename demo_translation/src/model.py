@@ -166,31 +166,26 @@ class TranslationModel(nn.Module):
         output_ids = torch.argmax(probs, dim=-1)    # (B, Lt)
         return output_ids
 
-    def predict(self, text):
-        # 1. 处理输入,编码为模型输入 (N=1, L)
-        device = self.src_embedding.weight.device
-        ids = self.src_tokenizer.encode(text)
-        inputs = torch.tensor([ids]).to(device)
-
-        # 2. 推理预测
+    def predict_batch(self, src_ids):
+        device = src_ids.device
         self.eval()
         with torch.no_grad():
             # 前向传播
-            src_key_padding_mask = (inputs == self.src_embedding.padding_idx)
-            memory = self.encode(src_ids=inputs, src_key_padding_mask=src_key_padding_mask)
+            src_key_padding_mask = (src_ids == self.src_embedding.padding_idx)
+            memory = self.encode(src_ids=src_ids, src_key_padding_mask=src_key_padding_mask)
 
             # 解码(自回归生成)
-            # 2.1. 定义解码器初始输入(<sos>),形状(N,Lt=1)
-            N = inputs.shape[0]
+            # 1. 定义解码器初始输入(<sos>),形状(N,Lt=1)
+            N = src_ids.shape[0]
             decoder_inputs = torch.full((N, 1), self.tgt_tokenizer.sos_id).to(device)
 
             # 定义标志位,记录当前数据样本是否已生成<eos>,默认 N 个 False
-            is_finished = torch.full((N, ), False, dtype=torch.bool).to(device)
+            is_finished = torch.full((N,), False, dtype=torch.bool).to(device)
 
-            # 2.2. 循环迭代,自回归生成
+            # 2. 循环迭代,自回归生成
             generated_ids = []
             for i in range(MAX_SEQ_LEN):
-                # 2.2.1. 调用模型的一步解码,得到输出(N, T, Vt)
+                # 2.1. 调用模型的一步解码,得到输出(N, T, Vt)
                 tgt_key_padding_mask = (decoder_inputs == self.tgt_embedding.padding_idx)
                 logits = self.decode(
                     memory=memory,
@@ -200,16 +195,16 @@ class TranslationModel(nn.Module):
                     tgt_key_padding_mask=tgt_key_padding_mask,
                 )
 
-                # 2.2.2 取最后一个位置的特征向量,贪心解码,得到形状为 (N,) 的预测 ids
+                # 2.2 取最后一个位置的特征向量,贪心解码,得到形状为 (N,) 的预测 ids
                 next_token_ids = torch.argmax(logits[:, -1], dim=-1)
 
-                # 2.2.3 更新解码器输入, 拼接一个 id (N, T) -> (N, T+1)
+                # 2.3 更新解码器输入, 拼接一个 id (N, T) -> (N, T+1)
                 decoder_inputs = torch.cat([decoder_inputs, next_token_ids.unsqueeze(1)], dim=-1)
 
-                # 2.2.4 保存当前生成的 id
+                # 2.4 保存当前生成的 id
                 generated_ids.append(next_token_ids.unsqueeze(1))
 
-                # 2.2.5 预判是否生成结束 (有没有<eos>)
+                # 2.5 预判是否生成结束 (有没有<eos>)
                 is_finished |= (next_token_ids == self.tgt_tokenizer.eos_id)
 
                 if is_finished.all():
@@ -223,9 +218,20 @@ class TranslationModel(nn.Module):
             for i, ids in enumerate(generated_list):
                 # 如果找到 <eos> 就返回缩影位置, 截断处理
                 if self.tgt_tokenizer.eos_id in ids:
-                    eos_pos = ids.index( self.tgt_tokenizer.eos_id )
+                    eos_pos = ids.index(self.tgt_tokenizer.eos_id)
                     generated_list[i] = ids[:eos_pos]
 
-        # 4. 处理输出,解码为英文句子
-        sentence = self.tgt_tokenizer.decode(generated_list[0])
+        return generated_list
+
+    def predict(self, text):
+        # 1. 处理输入,编码为模型输入 (N=1, L)
+        device = self.src_embedding.weight.device
+        ids = self.src_tokenizer.encode(text)
+        inputs = torch.tensor([ids]).to(device)
+
+        # 2. 推理预测
+        results = self.predict_batch(inputs)
+
+        # 3. 处理输出,解码为英文句子
+        sentence = self.tgt_tokenizer.decode(results[0])
         return sentence

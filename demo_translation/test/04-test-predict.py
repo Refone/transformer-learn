@@ -1,7 +1,7 @@
 from data import *
 from model import *
 
-device = 'cpu'  # mps 有 padding mask 的兼容性问题
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 en_tokenizer = EnTokenizer.create_from_vocab_file(EN_VOCAB_FILE)
 zh_tokenizer = ZhTokenizer.create_from_vocab_file(ZH_VOCAB_FILE)
@@ -11,7 +11,7 @@ model = TranslationModel(
     tgt_tokenizer=en_tokenizer).to(device)
 model.load_state_dict( torch.load( BEST_MODEL, map_location=device ) )
 
-text = '你好'
+text = '我喜欢你。'
 sentences = model.predict(text)
 
 print(sentences)

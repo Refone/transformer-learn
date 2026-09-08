@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 from config import *
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from demo_translation.src.tokenizer import EnTokenizer, ZhTokenizer
+from tokenizer import EnTokenizer, ZhTokenizer
 
 def preprocess():
     # 清空中间文件
