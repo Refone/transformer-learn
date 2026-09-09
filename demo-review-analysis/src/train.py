@@ -45,7 +45,7 @@ def train():
         if this_loss < min_loss:
             min_loss = this_loss
             torch.save( model.state_dict(), BEST_MODEL )
-            print('Best Model save to {BEST_MODEL}!')
+            print(f'Best Model save to {BEST_MODEL}!')
 
     writer.close()
 

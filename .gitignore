@@ -5,3 +5,4 @@ __pycache__/
 
 demo-review-analysis/model/bert-base-chinese/
 */log/*
+demo-review-analysis/model/best_model.pt
