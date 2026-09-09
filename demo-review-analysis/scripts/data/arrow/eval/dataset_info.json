@@ -1,0 +1,71 @@
+{
+  "builder_name": "csv",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "csv",
+  "dataset_size": 6381,
+  "description": "",
+  "download_checksums": {
+    "C:/Users/Refone/Desktop/transformer-learn/demo-mybert/scripts/../data/test.csv": {
+      "num_bytes": 1167,
+      "checksum": null
+    }
+  },
+  "download_size": 1167,
+  "features": {
+    "input_ids": {
+      "feature": {
+        "dtype": "int32",
+        "_type": "Value"
+      },
+      "_type": "List"
+    },
+    "token_type_ids": {
+      "feature": {
+        "dtype": "int8",
+        "_type": "Value"
+      },
+      "_type": "List"
+    },
+    "attention_mask": {
+      "feature": {
+        "dtype": "int8",
+        "_type": "Value"
+      },
+      "_type": "List"
+    },
+    "labels": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 7548,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 2127,
+      "num_examples": 30,
+      "dataset_name": "csv"
+    },
+    "eval": {
+      "name": "eval",
+      "num_bytes": 2127,
+      "num_examples": 30,
+      "dataset_name": "csv"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 2127,
+      "num_examples": 30,
+      "dataset_name": "csv"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

@@ -1,0 +1,3 @@
+https://hf-mirror.com/google-bert/bert-base-chinese
+
+google-bert/bert-base-chinese

@@ -2,3 +2,5 @@
 .claude/
 __pycache__/
 .vscode/
+
+demo-review-analysis/model/bert-base-chinese/
