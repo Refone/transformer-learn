@@ -8,13 +8,17 @@ from tokenizer import BaseTokenizer
 
 
 class TranslationModel(nn.Module):
-
+    """
+    模型结构图：
+        images/dev/data_flow.png
+    """
     def __init__(self,
                  src_tokenizer:BaseTokenizer, tgt_tokenizer:BaseTokenizer):
         super().__init__()
         self.d_model = D_MODEL
         self.src_tokenizer = src_tokenizer
         self.tgt_tokenizer = tgt_tokenizer
+
         # 定义两个嵌入层
         # src_ids (B, Ls)
         #   -> src_emb(B, Ls, D)
@@ -23,6 +27,7 @@ class TranslationModel(nn.Module):
             embedding_dim=self.d_model,
             padding_idx=src_tokenizer.pad_id
         )
+
         # tgt_ids (B, Lt)
         #   -> tgt_emb(B, Lt, D)
         self.tgt_embedding = nn.Embedding(
@@ -55,6 +60,7 @@ class TranslationModel(nn.Module):
             ),
             num_layers=NUM_DECODER_LAYERS,
         )
+
         # 线性层
         # decoder_output(B, Lt, D)
         #   -> logits(B, Lt, Vt)
@@ -62,7 +68,15 @@ class TranslationModel(nn.Module):
             in_features=self.d_model,
             out_features=tgt_tokenizer.vocab_size,
         )
+
         # 位置编码逻辑（因为不存在参数，所以不设置其为层）
+        # 不能写成 self.pe, 这里 pe 有两个属性：
+        #
+        # 1. pe 是一个跟随 model.to(device) 移动的张量
+        # 2. pe 是常量，不会被训练，不被 optimizer 更新
+        #
+        # 其他地方 self.pe 飘红是应为 IDE 静态检查不通过，
+        # 但实际运行是没有问题的
         pe = self.create_pe(self.d_model, MAX_SEQ_LEN)
         self.register_buffer('pe', pe)
 
@@ -90,6 +104,9 @@ class TranslationModel(nn.Module):
         return pe
 
     def positional_encoding(self, x):
+        """
+        位置编码
+        """
         return x + self.pe[:, :x.size(1)]
 
     def encode(self, src_ids, src_key_padding_mask):
@@ -142,7 +159,7 @@ class TranslationModel(nn.Module):
         :param tgt_key_padding_mask:    目标语言序列填充屏蔽  (B, L_tgt)
         :param memory_key_padding_mask: memory填充屏蔽      (B, L_src)
         :param is_causal:           因果掩码，为 True tgt_mask 设置上三角矩阵
-        :return:
+        :return: logits (B, Lt, Vt)
 
         直接 tgt_is_causal 方式创建因果掩码有版本兼容问题，故底层采用 tgt_mask
         """
@@ -167,6 +184,26 @@ class TranslationModel(nn.Module):
         return output_ids
 
     def predict_batch(self, src_ids):
+        """
+        前向传播，自回归生成流程
+
+        1. 定义解码器初始输入 [<sos>], 设置 is_finished 检测 Batch 中每一句话是否已有 <eos>
+
+        2. 循环迭代，自回归生成
+            2.1 调用模型一次解码，得到 (N, T, Vt)
+            2.2 取最后一个位置的特征向量，贪心解码，得到形状为 (N, ) 的预测 ids
+            2.3 更新解码器输入, 拼接一个 id, decoder_inputs (N, T) -> (N, T+1)
+            2.4 保存当前生成的 id, gen_ids (N, T) -> (N, T+1)
+            2.5 判断每一句话是否生成结束 (有没有 <eos>)
+
+        3. 整理最终输出 gen_ids (N, L) -> gen_list (N, )
+            3.1 合并 gen_ids, 形状为 (N, L)
+            3.2 删除 <eos> 之后的无效 token id
+
+        :param src_ids: 输入文字转（中文原文） ids
+        :return: 输出文字（翻译结果） ids
+        """
+
         device = src_ids.device
         self.eval()
         with torch.no_grad():
@@ -175,7 +212,7 @@ class TranslationModel(nn.Module):
             memory = self.encode(src_ids=src_ids, src_key_padding_mask=src_key_padding_mask)
 
             # 解码(自回归生成)
-            # 1. 定义解码器初始输入(<sos>),形状(N,Lt=1)
+            # 1. 定义解码器初始输入(<sos>),形状(N, Lt=1)
             N = src_ids.shape[0]
             decoder_inputs = torch.full((N, 1), self.tgt_tokenizer.sos_id).to(device)
 
@@ -193,12 +230,17 @@ class TranslationModel(nn.Module):
                     tgt_ids=decoder_inputs,
                     is_causal=True,
                     tgt_key_padding_mask=tgt_key_padding_mask,
-                )
+                )   # (N, T, Vt)
 
-                # 2.2 取最后一个位置的特征向量,贪心解码,得到形状为 (N,) 的预测 ids
+                # 2.2 取最后一时间步 logits[:, -1], (N, Vt)
+                # 取概率最高的词 argmax(..., dim=-1) Vt 上找最大值
+                # 最终获得结果为 (N, )
                 next_token_ids = torch.argmax(logits[:, -1], dim=-1)
 
                 # 2.3 更新解码器输入, 拼接一个 id (N, T) -> (N, T+1)
+                # next_token_ids.unsqueeze(1), (N, ) -> (N, 1)
+                # decoder_inputs (N, T)
+                # cat(..., dim=-1) (N, 1) + (N, T) -> (N, T+1)
                 decoder_inputs = torch.cat([decoder_inputs, next_token_ids.unsqueeze(1)], dim=-1)
 
                 # 2.4 保存当前生成的 id
@@ -224,6 +266,12 @@ class TranslationModel(nn.Module):
         return generated_list
 
     def predict(self, text):
+        """
+        输入中文原文, 输出英文翻译结果
+        1. 处理输入, text -> src_ids
+        2. 推理预测, src_ids -> tgt_ids
+        3. 处理输出, tgt_ids -> sentence
+        """
         # 1. 处理输入,编码为模型输入 (N=1, L)
         device = self.src_embedding.weight.device
         ids = self.src_tokenizer.encode(text)
@@ -235,3 +283,61 @@ class TranslationModel(nn.Module):
         # 3. 处理输出,解码为英文句子
         sentence = self.tgt_tokenizer.decode(results[0])
         return sentence
+
+if __name__ == '__main__':
+    # --- UNIT-TEST ---
+    def test_model():
+        from tokenizer import EnTokenizer, ZhTokenizer
+
+        en_tokenizer = EnTokenizer.create_from_vocab_file(EN_VOCAB_FILE)
+        zh_tokenizer = ZhTokenizer.create_from_vocab_file(ZH_VOCAB_FILE)
+
+        model = TranslationModel(
+            src_tokenizer=zh_tokenizer,
+            tgt_tokenizer=en_tokenizer,
+        )
+
+        print(zh_tokenizer.vocab_size)  # Vs = 2749
+        print(en_tokenizer.vocab_size)  # Vt = 7412
+
+        N = 64
+        L_src = 20  # Ls = 20
+        L_tgt = 26  # Lt = 26
+
+        src_ids = torch.randint(0, zh_tokenizer.vocab_size, (N, L_src))
+        tgt_ids = torch.randint(0, en_tokenizer.vocab_size, (N, L_tgt))
+        src_key_padding_mask = torch.zeros((N, L_src)).bool()
+        tgt_key_padding_mask = torch.zeros((N, L_tgt)).bool()
+
+        output_ids = model(
+            src_ids=src_ids,  # (N, Ls)
+            tgt_ids=tgt_ids,  # (N, Lt)
+            src_key_padding_mask=src_key_padding_mask,  # (N, Ls)
+            tgt_key_padding_mask=tgt_key_padding_mask,  # (N, Lt)
+            memory_key_padding_mask=src_key_padding_mask,  # (N, Ls)
+            is_causal=True
+        )
+
+        # 测试数据流形状是否正确
+        print(output_ids.shape)  # (N, Lt, Vt) = [64, 26, 7412]
+
+    def test_predict():
+        from tokenizer import EnTokenizer, ZhTokenizer
+
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        en_tokenizer = EnTokenizer.create_from_vocab_file(EN_VOCAB_FILE)
+        zh_tokenizer = ZhTokenizer.create_from_vocab_file(ZH_VOCAB_FILE)
+
+        model = TranslationModel(
+            src_tokenizer=zh_tokenizer,
+            tgt_tokenizer=en_tokenizer).to(device)
+        model.load_state_dict( torch.load( BEST_MODEL, map_location=device ) )
+
+        text = '我喜欢你。'
+        sentences = model.predict(text)
+
+        print(sentences)
+
+    # test_model()
+    test_predict()

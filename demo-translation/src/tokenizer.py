@@ -46,11 +46,9 @@ class BaseTokenizer(ABC):
 
         return ids
 
+    @abc.abstractmethod
     def decode(self, ids):
-        tokens = []
-        for index in ids:
-            tokens.append(self.id2word[index])
-        return tokens
+        pass
 
     @classmethod
     def create_from_vocab_file(cls, vocab_file):
@@ -92,3 +90,37 @@ class ZhTokenizer(BaseTokenizer):
     @classmethod
     def tokenize(cls, sentence):
         return list(sentence)
+
+    def decode(self, ids):
+        tokens = []
+        for index in ids:
+            tokens.append(self.id2word[index])
+        return ''.join(tokens)
+
+if __name__ == '__main__':
+    # --- UNIT-TEST ---
+    from tokenizer import EnTokenizer, ZhTokenizer
+
+    en_tokenizer = EnTokenizer.create_from_vocab_file(EN_VOCAB_FILE)
+    zh_tokenizer = ZhTokenizer.create_from_vocab_file(ZH_VOCAB_FILE)
+
+    en_text = "I am a student."
+    zh_text = "我是一名学生。"
+
+    en_tokens = en_tokenizer.tokenize(en_text)
+    zh_tokens = zh_tokenizer.tokenize(zh_text)
+
+    print(f'en text -> tokens: {en_text} -> {en_tokens}')
+    print(f'zh text -> tokens: {zh_text} -> {zh_tokens}')
+
+    en_ids = en_tokenizer.encode(en_text, mark=True)
+    zh_ids = zh_tokenizer.encode(zh_text, mark=True)
+
+    print(f'en text -> ids: {en_text} -> {en_ids}')
+    print(f'zh text -> ids: {zh_text} -> {zh_ids}')
+
+    en_decode = en_tokenizer.decode(en_ids)
+    zh_decode = zh_tokenizer.decode(zh_ids)
+
+    print(f'en ids -> text: {en_ids} -> {en_decode}')
+    print(f'zh ids -> text: {zh_ids} -> {zh_decode}')

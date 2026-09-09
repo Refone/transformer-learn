@@ -2,6 +2,3 @@
 .claude/
 __pycache__/
 .vscode/
-
-demo_translation/data/processed/*
-demo_translation/model/*

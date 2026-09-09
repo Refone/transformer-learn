@@ -7,7 +7,17 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tokenizer import EnTokenizer, ZhTokenizer
 
+
 def preprocess():
+    """
+    数据预处理
+        1. 读取文件 `pd.read_csv`
+        2. 数据集划分 `train_test_split`
+        3. 创建词表 `Tokenizer.build_vocab_file`
+        4. 创建分词器 `EnTokenizer.create_from_vocab_file`
+        5. 编码数据 自然语言 -> tokens -> ids
+        6. 保存预处理结果 `to_json(..., orient='records', lines=True)`
+    """
     # 清空中间文件
     for file_path in PROCESSED_DATA_DIR.iterdir():
         if file_path.is_file():
@@ -43,16 +53,17 @@ def preprocess():
     # {"en":[23, 345, .., 2342], "zh":[235, 1234, ..., 2134]}
     en_encode = lambda text: en_tokenizer.encode(text, mark=True)
     zh_encode = lambda text: zh_tokenizer.encode(text)
-    train_set['en'] = train_set['en'].apply( en_encode )
-    train_set['zh'] = train_set['zh'].apply( zh_encode )
-    test_set['zh'] = test_set['zh'].apply( zh_encode )
-    test_set['en'] = test_set['en'].apply( en_encode )
+    train_set['en'] = train_set['en'].apply(en_encode)
+    train_set['zh'] = train_set['zh'].apply(zh_encode)
+    test_set['zh'] = test_set['zh'].apply(zh_encode)
+    test_set['en'] = test_set['en'].apply(en_encode)
 
     # 6. 保存数据集
     train_set.to_json(TRAIN_IDS_JSONL_FILE, orient='records', lines=True)
     test_set.to_json(TEST_IDS_JSONL_FILE, orient='records', lines=True)
 
     print(f'数据预处理结束, 训练集{len(train_set)}, 测试集{len(test_set)}')
+
 
 class TranslateDataset(Dataset):
     def __init__(self, json_file):
@@ -73,6 +84,7 @@ class TranslateDataset(Dataset):
         """
         return self.data[index]['zh'], self.data[index]['en']
 
+
 class TranslateDataLoader(DataLoader):
     def __init__(self, is_train):
         self.is_train = is_train
@@ -86,6 +98,11 @@ class TranslateDataLoader(DataLoader):
 
     @staticmethod
     def collate_fn(batch):
+        """
+        对齐函数
+        :param batch:
+        :return:
+        """
         input_list = [torch.tensor(item[0]) for item in batch]
         target_list = [torch.tensor(item[1]) for item in batch]
 
@@ -94,3 +111,21 @@ class TranslateDataLoader(DataLoader):
         target_batch = pad_sequence(target_list, batch_first=True, padding_value=0)
 
         return input_batch, target_batch
+
+
+if __name__ == '__main__':
+    # --- UNIT-TEST ---
+    # 执行预处理逻辑
+    # 此逻辑会覆盖更新 data/processed 中间文件
+    preprocess()
+
+    # 检查 TranslateDataset 正确加载数据集
+    dataset = TranslateDataset(TEST_IDS_JSONL_FILE)
+    print(dataset[0])
+
+    # 检查 TranslateDataLoader 能正确分批加载数据
+    loader = TranslateDataLoader(is_train=False)
+    for batch in loader:
+        print(batch[0])
+        print(batch[1])
+        break
