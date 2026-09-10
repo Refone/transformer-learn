@@ -20,8 +20,8 @@ MODEL_NAME_OR_PATH = MODEL_DIR / 'bert-base-chinese'
 
 # 训练超参数
 LEARNING_RATE = 1e-5
-BATCH_SIZE = 16
-EPOCHS = 50
+BATCH_SIZE = 24
+EPOCHS = 20
 MAX_SEQ_LEN = 512
 
 if __name__ == '__main__':
